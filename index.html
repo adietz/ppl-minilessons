@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pilot Minis</title>
+<meta name="description" content="Private pilot mini-lessons in a swipe feed.">
+<meta name="theme-color" content="#0f3d63" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pilot Minis">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="hud" id="hud">
+  <div class="hud-left">
+    <div class="pill" id="pillProgress" title="Lessons seen"><span class="plane">✈</span> <span id="hudSeen">0</span>/<span id="hudTotal">0</span></div>
+    <div class="bar"><div class="bar-fill" id="hudBar"></div></div>
+  </div>
+  <div class="hud-right">
+    <div class="pill" id="pillStreak" title="Day streak">🔥 <span id="hudStreak">0</span></div>
+    <button class="pill icon" id="menuBtn" aria-label="Menu">☰</button>
+  </div>
+</header>
+
+<main class="feed" id="feed" aria-live="polite"></main>
+
+<button class="next-fab" id="nextBtn" aria-label="Next card">↓</button>
+
+<div class="sheet-backdrop" id="backdrop" hidden></div>
+<section class="sheet" id="sheet" hidden aria-modal="true" role="dialog">
+  <div class="sheet-grip"></div>
+  <button class="sheet-close" id="sheetClose" aria-label="Close">✕</button>
+  <div class="sheet-body" id="sheetBody"></div>
+</section>
+
+<div class="zoom" id="zoom" hidden role="dialog" aria-label="Figure">
+  <button class="zoom-close" aria-label="Close">✕</button>
+  <div class="zoom-scroll"><img alt="Figure, enlarged"></div>
+  <div class="zoom-tip">Tap the picture to zoom · pinch or drag to pan</div>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
