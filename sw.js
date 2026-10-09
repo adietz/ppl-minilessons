@@ -1,5 +1,5 @@
 /* Offline cache: app shell + content, cache-first, refreshed in the background. */
-const CACHE = 'pilot-minis-v2';
+const CACHE = 'pilot-minis-v3';
 const ASSETS = ['./','./index.html','./styles.css','./app.js','./data.js','./manifest.webmanifest',
   './icons/icon.svg','./icons/icon-192.png','./icons/icon-512.png','./icons/icon-512-maskable.png',
   './img/fig3-lift.svg',
@@ -40,7 +40,7 @@ const ASSETS = ['./','./index.html','./styles.css','./app.js','./data.js','./man
   './img/fig31-tstorm.svg',
   './img/fig43-tfr.svg',
   './img/fig44-route.svg'];
-self.addEventListener('install', e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())); });
+self.addEventListener('install', e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS.map(u=>new Request(u,{cache:'reload'})))).then(()=>self.skipWaiting())); });
 self.addEventListener('activate', e=>{ e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())); });
 self.addEventListener('fetch', e=>{
   if (e.request.method !== 'GET') return;

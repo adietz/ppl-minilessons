@@ -36,8 +36,8 @@ button{font:inherit;color:inherit}
 .bar-fill{height:100%;width:0;background:var(--accent);transition:width .4s}
 
 /* Feed */
-.feed{position:fixed;inset:0;overflow-y:auto;scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
-.item{scroll-snap-align:start;min-height:100dvh;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;
+.feed{position:fixed;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.item{display:none;min-height:100dvh;min-height:100vh;min-height:100dvh;flex-direction:column;
   padding:calc(env(safe-area-inset-top) + 62px) 20px calc(env(safe-area-inset-bottom) + 28px);}
 .item.short{justify-content:center}
 .card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:22px 20px 18px;box-shadow:0 6px 24px rgba(0,0,0,.06);
@@ -131,3 +131,19 @@ button{font:inherit;color:inherit}
   .fig{margin-left:-12px;margin-right:-12px}
   .sheet .fig{margin-left:-14px;margin-right:-14px}
 }
+
+/* One card at a time; switching only on a deliberate pull or a tap */
+.item.active{display:flex}
+.item.enter-up{animation:enterUp .28s ease-out}
+.item.enter-down{animation:enterDown .28s ease-out}
+@keyframes enterUp{from{transform:translateY(40px);opacity:.3}to{transform:none;opacity:1}}
+@keyframes enterDown{from{transform:translateY(-40px);opacity:.3}to{transform:none;opacity:1}}
+.pull-hint{position:fixed;left:50%;z-index:12;transform:translateX(-50%) scale(.9);opacity:0;pointer-events:none;
+  padding:9px 16px;border-radius:999px;background:var(--chip);color:var(--muted);font-weight:700;font-size:15px;
+  box-shadow:0 4px 14px rgba(0,0,0,.18);transition:opacity .12s,transform .12s,background .12s;white-space:nowrap}
+.pull-hint.show{opacity:1;transform:translateX(-50%) scale(1)}
+.pull-hint.bottom{bottom:calc(env(safe-area-inset-bottom) + 76px)}
+.pull-hint.top{top:calc(env(safe-area-inset-top) + 60px)}
+.pull-hint.ready{background:var(--accent);color:var(--accent-ink)}
+.prev-fab{position:fixed;right:22px;bottom:calc(env(safe-area-inset-bottom) + 72px);z-index:9;width:36px;height:36px;border-radius:50%;
+  border:0;background:var(--chip);color:var(--accent);font-size:17px;font-weight:800;box-shadow:0 3px 10px rgba(0,0,0,.18);cursor:pointer;opacity:.85}

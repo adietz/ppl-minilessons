@@ -129,7 +129,7 @@ function render(i){
     const s = e.target.closest('[data-src]'); if (s){ e.preventDefault(); openCard(s.dataset.src); }
     const z = e.target.closest('[data-zoom]'); if (z){ e.preventDefault(); openZoom(z.dataset.zoom); }
   });
-  feedEl.appendChild(el); observer.observe(el);
+  feedEl.appendChild(el);
   it.el = el;
 }
 /* Lesson body with the course figures placed after the section they belong to. */
@@ -209,7 +209,7 @@ function introHTML(){
     <h2>${first ? 'Swap the scroll for a skill' : 'Welcome back'}</h2>
     <p>${first ? 'Each card is a one or two minute private pilot lesson. Every few cards, a one-question check on something you have already read.' : 'Pick up where you left off. Missed questions come back first.'}</p>
     ${first ? '' : statsHTML()}
-    <div class="swipe-hint">Swipe up to start ↑</div>
+    <div class="swipe-hint">Tap ↓ or pull up to start</div>
   </article>`;
 }
 function doneHTML(){
@@ -217,16 +217,22 @@ function doneHTML(){
     <p>Keep swiping later for review. Questions come back on their schedule.</p>${statsHTML()}</article>`;
 }
 
-/* ---------- reader position ---------- */
+/* ---------- reader position ----------
+   One card is on screen at a time and scrolls freely inside the feed.
+   Moving to another card only happens on a deliberate action:
+   - touch: keep dragging past the end (or start) of the card by PULL_PX and let go
+   - mouse wheel / trackpad: keep scrolling past the end by WHEEL_PX within one gesture
+   - the Next button, the down button, or the keyboard.
+   Flings and small overscrolls stop at the end of the card. */
+const PULL_PX = 120;          // finger travel past the card edge needed to switch
+const WHEEL_PX = 400;         // wheel delta past the card edge needed to switch (desktop)
 let activeIdx = 0;
-const observer = new IntersectionObserver(entries=>{
-  entries.forEach(e=>{ if (e.isIntersecting) setActive(+e.target.dataset.i); });
-}, {root: feedEl, rootMargin: '-45% 0px -45% 0px', threshold: 0});
+const hintEl = document.getElementById('pullHint');
 
 function setActive(i){
   if (i === activeIdx && items[i].activated) return;
   activeIdx = i; items[i].activated = true;
-  // Mark this card and anything scrolled past on the way here as seen.
+  // Mark this card and anything before it as seen.
   let changed = false;
   for (let k = 0; k <= i; k++){
     const it = items[k];
@@ -241,17 +247,96 @@ function ensureAhead(){
     if (items[n].type==='done') break;
   }
 }
-function go(dir){
-  const target = items[Math.max(0, Math.min(items.length-1, activeIdx + dir))];
-  if (!target || !target.el) return;
-  // tall card: if the bottom of the current card is still below the fold, page down first
-  const cur = items[activeIdx].el;
-  if (dir > 0 && cur){
-    const r = cur.getBoundingClientRect(), vh = feedEl.clientHeight;
-    if (r.bottom > vh + 40){ feedEl.scrollBy({top: vh*0.8}); return; }
-  }
-  feedEl.scrollTo({top: target.el.offsetTop});
+function show(i, dir){
+  if (i < 0 || i >= items.length || !items[i].el) return false;
+  const prev = items[activeIdx] && items[activeIdx].el;
+  if (prev && i !== activeIdx) prev.classList.remove('active','enter-up','enter-down');
+  const el = items[i].el;
+  el.classList.remove('enter-up','enter-down');
+  el.classList.add('active');
+  if (dir) { void el.offsetWidth; el.classList.add(dir > 0 ? 'enter-up' : 'enter-down'); }
+  // going forward starts at the top; going back lands at the end of the previous card
+  feedEl.scrollTop = dir < 0 ? feedEl.scrollHeight : 0;
+  setActive(i);
+  return true;
 }
+function go(dir){ return show(activeIdx + dir, dir); }
+const atBottom = ()=> feedEl.scrollTop + feedEl.clientHeight >= feedEl.scrollHeight - 2;
+const atTop = ()=> feedEl.scrollTop <= 1;
+/* keyboard: page through a tall card first, then move on */
+function step(dir){
+  if (dir > 0 && !atBottom()) return feedEl.scrollBy({top: feedEl.clientHeight*0.8, behavior:'smooth'});
+  if (dir < 0 && !atTop()) return feedEl.scrollBy({top: -feedEl.clientHeight*0.8, behavior:'smooth'});
+  go(dir);
+}
+
+/* pull feedback */
+function pullUI(dir, dist){
+  const el = items[activeIdx] && items[activeIdx].el; if (!el) return;
+  if (!dir || dist <= 0){
+    el.style.transform = ''; hintEl.className = 'pull-hint'; return;
+  }
+  const can = activeIdx + dir >= 0 && activeIdx + dir < items.length;
+  const ready = can && dist >= PULL_PX;
+  const shown = Math.min(dist, PULL_PX*1.6) * 0.45;           // resistance
+  el.style.transition = 'none';
+  el.style.transform = `translateY(${dir > 0 ? -shown : shown}px)`;
+  hintEl.className = 'pull-hint show ' + (dir > 0 ? 'bottom' : 'top') + (ready ? ' ready' : '');
+  hintEl.textContent = !can ? (dir > 0 ? 'Loading…' : 'This is the first card')
+    : ready ? (dir > 0 ? '↑ Release for next' : '↓ Release for previous')
+            : (dir > 0 ? '↑ Keep pulling for next' : '↓ Keep pulling for previous');
+}
+function pullEnd(){
+  const el = items[activeIdx] && items[activeIdx].el;
+  if (el){ el.style.transition = 'transform .2s ease-out'; el.style.transform = ''; setTimeout(()=>{ el.style.transition=''; }, 220); }
+  hintEl.className = 'pull-hint';
+}
+
+/* touch: the pull only counts finger travel beyond the edge, within one touch */
+let T = null;  // {y, edgeY, dir}
+feedEl.addEventListener('touchstart', e=>{
+  if (e.touches.length !== 1) { T = null; return; }
+  T = {y: e.touches[0].clientY, edgeY: null, dir: 0, dist: 0};
+}, {passive:true});
+feedEl.addEventListener('touchmove', e=>{
+  if (!T || e.touches.length !== 1) return;
+  const y = e.touches[0].clientY, dy = y - T.y; T.y = y;   // dy < 0: finger moving up (content scrolls down)
+  if (!T.dir){
+    if (dy < 0 && atBottom()) { T.dir = 1; T.edgeY = y - dy; }
+    else if (dy > 0 && atTop()) { T.dir = -1; T.edgeY = y - dy; }
+  }
+  if (T.dir){
+    const dist = T.dir > 0 ? (T.edgeY - y) : (y - T.edgeY);
+    if (dist <= 0){ T.dir = 0; T.dist = 0; pullUI(0,0); return; }   // went back into the card: normal scrolling
+    T.dist = dist;
+    if (e.cancelable) e.preventDefault();                            // no rubber-band / pull-to-refresh
+    pullUI(T.dir, dist);
+  }
+}, {passive:false});
+function touchDone(){
+  if (!T) return;
+  const {dir, dist} = T; T = null;
+  pullEnd();
+  if (dir && dist >= PULL_PX) go(dir);
+}
+feedEl.addEventListener('touchend', touchDone, {passive:true});
+feedEl.addEventListener('touchcancel', ()=>{ T = null; pullEnd(); }, {passive:true});
+
+/* wheel / trackpad: momentum that merely reaches the edge is ignored; you have to keep going */
+let W = {dir:0, dist:0, timer:null, armed:false};
+feedEl.addEventListener('wheel', e=>{
+  const dir = e.deltaY > 0 ? 1 : e.deltaY < 0 ? -1 : 0; if (!dir) return;
+  const edge = dir > 0 ? atBottom() : atTop();
+  clearTimeout(W.timer);
+  W.timer = setTimeout(()=>{ W = {dir:0, dist:0, timer:null, armed:false}; pullEnd(); }, 350);
+  if (!edge){ W.dir = 0; W.dist = 0; W.armed = false; return; }
+  // first wheel event that hits the edge only arms; a gesture already in flight when it reached the edge does not count
+  if (!W.armed || W.dir !== dir){ W.armed = true; W.dir = dir; W.dist = 0; return; }
+  W.dist += Math.abs(e.deltaY);
+  const d = W.dist * PULL_PX / WHEEL_PX;
+  pullUI(dir, d);
+  if (W.dist >= WHEEL_PX){ W = {dir:0, dist:0, timer:null, armed:false}; pullEnd(); go(dir); }
+}, {passive:true});
 
 /* ---------- streak and HUD ---------- */
 function touchStreak(){
@@ -309,27 +394,37 @@ $('#menuBtn').addEventListener('click', openMenu);
 $('#sheetClose').addEventListener('click', closeSheet);
 $('#backdrop').addEventListener('click', closeSheet);
 $('#nextBtn').addEventListener('click', ()=>go(+1));
+$('#prevBtn').addEventListener('click', ()=>go(-1));
 document.addEventListener('keydown', e=>{
   if (!$('#zoom').hidden){ if (e.key==='Escape') $('#zoom').hidden = true; return; }
   if (!$('#sheet').hidden){ if (e.key==='Escape') closeSheet(); return; }
-  if (['ArrowDown','PageDown','j',' '].includes(e.key)){ e.preventDefault(); go(+1); }
-  else if (['ArrowUp','PageUp','k'].includes(e.key)){ e.preventDefault(); go(-1); }
+  if (['ArrowDown','PageDown',' '].includes(e.key)){ e.preventDefault(); step(+1); }
+  else if (['ArrowUp','PageUp'].includes(e.key)){ e.preventDefault(); step(-1); }
+  else if (e.key==='j' || e.key==='ArrowRight'){ e.preventDefault(); go(+1); }
+  else if (e.key==='k' || e.key==='ArrowLeft'){ e.preventDefault(); go(-1); }
   else if (/^[1-3abc]$/i.test(e.key)){ const it=items[activeIdx]; if (it && it.type==='quiz' && it.el){ const k='123abc'.indexOf(e.key.toLowerCase())%3; const b=it.el.querySelectorAll('.opt')[k]; b && b.click(); } }
 });
 
 /* ---------- start ---------- */
 // Already-read cards count as in the feed (eligible for quizzes).
 S.seenOrder.forEach(id=>inFeed.add(id));
-items.push({type:'intro'}); render(0); items[0].activated = true;
+items.push({type:'intro'}); render(0); items[0].el.classList.add('active'); items[0].activated = true;
 // A returning reader with reviews due starts with one right away.
 if (S.seenOrder.length){ const p = pickQuiz(); if (p && p.review){ render(addQuiz(p)); } }
 lessonsSinceQuiz = 0;
 ensureAhead(); hud();
 
 // test hook (used by the screenshot script)
-window.__ppl = { S, items, go, answer:(k)=>{ const it=items[activeIdx]; it.el.querySelectorAll('.opt')[k].click(); } };
+window.__ppl = { S, items, go, show, PULL_PX, get active(){ return activeIdx; }, answer:(k)=>{ const it=items[activeIdx]; it.el.querySelectorAll('.opt')[k].click(); } };
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:'){
-  window.addEventListener('load', ()=> navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  // A new version takes over right away (the worker calls skipWaiting + clients.claim); reload once when it does.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{ if (hadController && !reloaded){ reloaded = true; location.reload(); } });
+  window.addEventListener('load', ()=> navigator.serviceWorker.register('sw.js', {updateViaCache:'none'}).then(reg=>{
+    reg.update().catch(()=>{});
+    document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='visible') reg.update().catch(()=>{}); });
+  }).catch(()=>{}));
 }
 })();
